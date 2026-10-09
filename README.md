@@ -37,7 +37,7 @@ Requirements: Claude Code, **Python 3.8+** on PATH (`python3`, `python` or `py -
 `sh` (built into macOS/Linux; on Windows it comes with Git for Windows / Git Bash).
 
 ```
-/plugin marketplace add OWNER/REPO
+/plugin marketplace add 13sambhavjain/ctx-kit
 /plugin install ctx-kit@sambhav-plugins
 ```
 

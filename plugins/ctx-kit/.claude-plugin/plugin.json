@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Context tree for Claude Code: a small INDEX plus topic nodes loaded on demand, decisions as ADRs, zero-token drift and rename checks. Handoff and session advisor coming next.",
   "author": { "name": "13sambhavjain" },
-  "repository": "https://github.com/OWNER/REPO",
+  "repository": "https://github.com/13sambhavjain/ctx-kit",
   "license": "MIT",
   "keywords": ["context", "memory", "documentation", "handoff", "tokens"],
   "userConfig": {

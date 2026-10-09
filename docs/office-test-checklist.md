@@ -9,7 +9,7 @@ code or project names. When you're done, run `/ctx-feedback <summary>` to draft 
 - [ ] Which surface are you using: Desktop app Code tab, VS Code, or terminal `claude`? What version?
 
 ## 1. Install
-- [ ] `/plugin marketplace add OWNER/REPO`. Did it work? If your company restricts plugin marketplaces, note the exact error.
+- [ ] `/plugin marketplace add 13sambhavjain/ctx-kit`. Did it work? If your company restricts plugin marketplaces, note the exact error.
 - [ ] `/plugin install ctx-kit@sambhav-plugins`. Were you asked for "Python command"? Leave it empty first.
 - [ ] Restart or start a new session in a test project. Did you see the one-time note "ctx-kit: no context tree here yet…"?
 
