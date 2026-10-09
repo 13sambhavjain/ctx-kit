@@ -47,7 +47,14 @@ code or project names. When you're done, run `/ctx-feedback <summary>` to draft 
 - [ ] `/ctx-advisor off` silences it. `/ctx-advisor status` shows billing as api or subscription. Is that right for your office setup?
 - [ ] Reset with `/ctx-advisor threshold 120000 200000`.
 
-## 8. Feedback loop
+## 8. read-guard (separate plugin)
+- [ ] `/plugin install read-guard@sambhav-plugins`, then start a new session in a **coding** project.
+- [ ] Ask Claude to read a file, then (later, file unchanged) to read it again. Did the second read show "[read-guard] Unchanged since your earlier Read…"? If it showed the full file, the replacement isn't accepted on your version, so note the Claude Code version.
+- [ ] Let Claude edit a file, then ask it to read the whole file again. Did it get a diff instead of the full file?
+- [ ] Did Claude ever get confused by a stub or diff (re-reading in a loop, or "can't see the file")? Note it.
+- [ ] After a normal day of coding: `/read-guard stats`. Copy the numbers into feedback; they decide whether Bash de-dup is worth building.
+
+## 9. Feedback loop
 - [ ] `/ctx-feedback first impressions…`. Check the draft has **no paths, code or project names**, then open the link and submit it (or paste the saved draft into a new issue).
 
 ## Known gaps in v0.1

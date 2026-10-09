@@ -1,6 +1,8 @@
 {
   "name": "sambhav-plugins",
-  "owner": { "name": "13sambhavjain" },
+  "owner": {
+    "name": "13sambhavjain"
+  },
   "description": "Personal Claude Code plugins for managing context and cost.",
   "plugins": [
     {
@@ -8,7 +10,22 @@
       "source": "./plugins/ctx-kit",
       "description": "Context tree loaded on demand, decisions as ADRs, zero-token drift/rename checks, lossless handoffs, session-size advisor.",
       "category": "productivity",
-      "tags": ["context", "memory", "tokens"]
+      "tags": [
+        "context",
+        "memory",
+        "tokens"
+      ]
+    },
+    {
+      "name": "read-guard",
+      "source": "./plugins/read-guard",
+      "description": "Unchanged re-reads become a one-line stub, re-reads after a change become a diff, stale native 'unchanged' stubs are corrected; built-in savings stats.",
+      "category": "productivity",
+      "tags": [
+        "tokens",
+        "read",
+        "diff"
+      ]
     }
   ]
 }

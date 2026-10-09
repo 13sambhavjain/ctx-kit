@@ -1,0 +1,18 @@
+{
+  "name": "read-guard",
+  "displayName": "read-guard",
+  "version": "0.1.0",
+  "description": "Stops paying twice for file contents: unchanged re-reads become a one-line stub, re-reads after a change become a diff, and stale native 'unchanged' stubs are corrected. Built-in stats show what it saved.",
+  "author": { "name": "13sambhavjain" },
+  "repository": "https://github.com/13sambhavjain/ctx-kit",
+  "license": "MIT",
+  "keywords": ["tokens", "read", "cache", "diff", "cost"],
+  "userConfig": {
+    "python_cmd": {
+      "type": "string",
+      "title": "Python command (optional)",
+      "description": "Command that runs Python 3.8+, e.g. python, py -3, or a full path. Leave empty to auto-detect.",
+      "default": ""
+    }
+  }
+}

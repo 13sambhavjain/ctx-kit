@@ -1,4 +1,10 @@
-# ctx-kit
+# ctx-kit (and read-guard)
+
+This repo is the `sambhav-plugins` marketplace with two independent plugins:
+- **ctx-kit**: context tree, handoffs, session-size advisor (below)
+- **read-guard**: stop paying twice for file contents ([plugins/read-guard](plugins/read-guard/README.md))
+
+---
 
 A Claude Code plugin that keeps your project's context in a **tree of small markdown
 files that Claude loads only when it needs them**. Lower token cost per session, and a
@@ -67,6 +73,7 @@ Requirements: Claude Code, **Python 3.8+** on PATH (`python3`, `python` or `py -
 ```
 /plugin marketplace add 13sambhavjain/ctx-kit
 /plugin install ctx-kit@sambhav-plugins
+/plugin install read-guard@sambhav-plugins      # optional, independent
 ```
 
 Then, in a project: `/ctx-kit:ctx init` (or just `/ctx init`).
@@ -114,7 +121,6 @@ approve "allow .claude edits for this session" once per session instead.
 
 ## Roadmap
 
-- **Read-guard** (separate, opt-in): skip re-reads of unchanged files, *if* Claude Code doesn't already do this natively.
 - Better retrieval than keyword search; sharing a tree with a team.
 - PowerShell launcher for Windows machines without Git Bash.
 

@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" hook read", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" hook bash", "timeout": 10 }
+        ]
+      }
+    ],
+    "PreCompact": [
+      { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" hook pre-compact", "timeout": 10 } ] }
+    ],
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/run.sh\" hook session-start", "timeout": 10 } ] }
+    ]
+  }
+}
