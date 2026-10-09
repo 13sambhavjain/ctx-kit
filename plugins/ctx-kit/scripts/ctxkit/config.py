@@ -83,6 +83,12 @@ class Workspace:
 
     @property
     def initialized(self):
+        """The context tree is set up here (via /ctx init)."""
+        return self.local is not None and "storage" in self.local
+
+    @property
+    def configured(self):
+        """Any ctx-kit config exists here (tree and/or handoff preferences)."""
         return self.local is not None
 
     def get(self, key, default=None):

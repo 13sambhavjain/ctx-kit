@@ -1,7 +1,7 @@
 """Hook handlers. Every handler must be fast, silent on error, and exit 0.
 
 Output conventions (Claude Code hooks):
-  systemMessage                      -> shown to the user only (zero tokens)
+  systemMessage                        -> shown to the user only (zero tokens)
   hookSpecificOutput.additionalContext -> added to Claude's context (costs tokens; used sparingly)
 """
 import json
@@ -9,7 +9,7 @@ import os
 import sys
 import time
 
-from . import check, config, util
+from . import advisor, check, config, handoff, util
 
 
 def _out(obj):
@@ -21,43 +21,96 @@ def _sessions_dir(data):
     return os.path.join(data, "sessions")
 
 
+def _cwd(inp):
+    return inp.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+
+
 def _prune(data, days=14):
-    d = _sessions_dir(data)
-    if not os.path.isdir(d):
-        return
     cutoff = time.time() - days * 86400
-    for name in os.listdir(d):
-        p = os.path.join(d, name)
-        try:
-            if os.path.getmtime(p) < cutoff:
-                for f in os.listdir(p):
-                    os.remove(os.path.join(p, f))
-                os.rmdir(p)
-        except OSError:
-            pass
+    for sub in ("sessions", "advisor", "pending"):
+        d = os.path.join(data, sub)
+        if not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            p = os.path.join(d, name)
+            try:
+                if os.path.getmtime(p) >= cutoff:
+                    continue
+                if os.path.isdir(p):
+                    for f in os.listdir(p):
+                        os.remove(os.path.join(p, f))
+                    os.rmdir(p)
+                else:
+                    os.remove(p)
+            except OSError:
+                pass
 
 
 def session_start(inp, data):
-    cwd = inp.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = _cwd(inp)
     ws = config.Workspace(cwd)
+    source = inp.get("source") or "startup"
     _prune(data)
-    if not ws.initialized:
-        seen_path = os.path.join(data, "seen-workspaces.json")
-        seen = util.load_json(seen_path, {}) or {}
-        key = os.path.normcase(ws.root)
-        if key in seen or inp.get("source") not in (None, "startup"):
-            return
-        seen[key] = util.today()
-        util.save_json(seen_path, seen)
-        _out({"systemMessage": "ctx-kit: no context tree here yet. Run /ctx-kit:ctx init to set one up "
-                               "(this note is shown once per workspace)."})
-        return
-    msgs = []
-    if ws.get("write_mode") == "tool" and inp.get("source") in (None, "startup", "resume"):
+    msgs, ctx = [], []
+
+    if source == "clear":
+        pend = handoff.take_pending_after_clear(ws, data, cwd)
+        if pend:
+            ctx.append(handoff.prompt_payload(pend, pend.get("prompt")))
+            handoff.set_status(ws, pend.get("handoff"), "consumed")
+            msgs.append("ctx-kit: loaded handoff %s into this fresh session." % pend.get("handoff"))
+        elif ws.get("autoload_on_clear"):
+            h, prompt, _ = handoff.resolve(ws, "")
+            if h and prompt:
+                ctx.append(handoff.prompt_payload(h, os.path.join(h["folder"], prompt)))
+                handoff.set_status(ws, h["id"], "consumed")
+                msgs.append("ctx-kit (experimental autoload_on_clear): loaded latest open handoff %s." % h["id"])
+    elif source == "compact" and ws.configured:
+        st = util.load_json(os.path.join(data, "last-checkpoint.json"), {}) or {}
+        if st.get("session") == inp.get("session_id") and st.get("path") and os.path.exists(st["path"]):
+            ctx.append("ctx-kit: before this compaction a full digest of the session was saved to %s. "
+                       "If the summary lacks a detail you need (a decision, reason or answer), read that file." % st["path"])
+    elif source == "startup":
+        if not ws.configured:
+            seen_path = os.path.join(data, "seen-workspaces.json")
+            seen = util.load_json(seen_path, {}) or {}
+            key = os.path.normcase(ws.root)
+            if key not in seen:
+                seen[key] = util.today()
+                util.save_json(seen_path, seen)
+                msgs.append("ctx-kit: no context tree here yet. Run /ctx-kit:ctx init to set one up "
+                            "(this note is shown once per workspace).")
+        else:
+            opens = handoff.list_handoffs(ws, only_open=True)
+            if opens:
+                ids = ", ".join(h["id"] for h in opens[:3])
+                msgs.append("ctx-kit: %d open handoff(s): %s. Continue one with /ctx-kit:pickup <id>." % (len(opens), ids))
+
+    if ws.initialized and ws.get("write_mode") == "tool" and source in ("startup", "resume"):
         msgs.append("ctx-kit: when Claude asks to edit files in .claude/, choose \"allow for this session\" "
                     "to avoid repeated prompts.")
+    out = {}
     if msgs:
-        _out({"systemMessage": " ".join(msgs)})
+        out["systemMessage"] = " ".join(msgs)
+    if ctx:
+        out["hookSpecificOutput"] = {"hookEventName": "SessionStart", "additionalContext": "\n\n".join(ctx)}
+    if out:
+        _out(out)
+
+
+def session_end(inp, data):
+    reason = inp.get("reason") or inp.get("source") or ""
+    if reason == "clear":
+        handoff.record_clear(data, inp.get("session_id") or "", _cwd(inp))
+
+
+def pre_compact(inp, data):
+    ws = config.Workspace(_cwd(inp))
+    if not ws.configured:
+        return
+    p = handoff.checkpoint(ws, data, inp.get("session_id") or "", inp.get("transcript_path"))
+    if p:
+        util.save_json(os.path.join(data, "last-checkpoint.json"), {"session": inp.get("session_id"), "path": p})
 
 
 def post_read(inp, data):
@@ -66,7 +119,7 @@ def post_read(inp, data):
     fp = ti.get("file_path") or ""
     if not fp.endswith(".md"):
         return
-    cwd = inp.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = _cwd(inp)
     ws = config.Workspace(cwd)
     if not ws.initialized:
         return
@@ -87,7 +140,7 @@ def post_read(inp, data):
 
 def post_edit(inp, data):
     """Record files this session changed (outside the repo, in plugin data). No output."""
-    cwd = inp.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    cwd = _cwd(inp)
     ws = config.Workspace(cwd)
     if not ws.initialized:
         return
@@ -102,10 +155,28 @@ def post_edit(inp, data):
         f.write("%s\t%s\n" % (util.now_iso(), util.rel(os.path.abspath(os.path.join(cwd, fp)), ws.root)))
 
 
+def stop(inp, data):
+    if inp.get("agent_id"):  # subagent stop events are not the user's turn
+        return
+    msg = advisor.on_stop(config.Workspace(_cwd(inp)), data, inp)
+    if msg:
+        _out({"systemMessage": msg})
+
+
+def prompt_submit(inp, data):
+    note = advisor.on_prompt(config.Workspace(_cwd(inp)), data, inp)
+    if note:
+        _out({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": note}})
+
+
 HANDLERS = {
     "session-start": session_start,
+    "session-end": session_end,
+    "pre-compact": pre_compact,
     "post-read": post_read,
     "post-edit": post_edit,
+    "stop": stop,
+    "prompt": prompt_submit,
 }
 
 
@@ -114,6 +185,8 @@ def main(event, data_dir):
     try:
         raw = sys.stdin.read()
         inp = json.loads(raw) if raw.strip() else {}
+        if not isinstance(inp, dict):
+            inp = {}
     except Exception:
         inp = {}
     try:

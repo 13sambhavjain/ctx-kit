@@ -4,8 +4,7 @@ A Claude Code plugin that keeps your project's context in a **tree of small mark
 files that Claude loads only when it needs them**. Lower token cost per session, and a
 readable, versionable record of how the project works and why decisions were made.
 
-> Status: **v0.1, milestone 1 (context tree)**. Handoff (`/handoff`, `/pickup`,
-> `/ctx-clean`) and the session advisor are planned for the next milestones.
+> Status: **v0.2**: context tree, handoff, and session-size advisor. Each part works on its own.
 
 ## What you get
 
@@ -31,6 +30,35 @@ readable, versionable record of how the project works and why decisions were mad
 - **Safe writes.** Claude writes through a small script that only accepts paths inside the
   tree, refuses config-like files, redacts secrets, and won't overwrite on stale edits.
 
+### Handoff (works with or without a tree)
+
+- **`/handoff [slug] [--force] [--split]`** writes `.claude/handoffs/<date>-<slug>-<session>/HANDOFF.md`
+  (goal, status, decisions + why, rejected options, your instructions, open questions, gotchas,
+  working set, next steps) and one or more `next-N-*.prompt.md` prompts for the next session(s).
+  - **Guardrail:** refuses (unless `--force`) while work is mid-way: open tasks, a pending question, etc.
+  - **Lossless but cheap:** if the session was compacted, a script filters *only the compacted-away
+    part* of the transcript (keeping your answers, plan feedback, subagent results; clipping bulky
+    tool output) and Haiku subagents mine it. No compaction means no mining, so zero extra cost.
+  - With a tree, durable facts and decisions go into the tree and the handoff links to them.
+- **`/pickup [id[:N]]`** continues from a handoff in a new session (a plain `/clear` never auto-loads).
+- **`/ctx-clean`** is a better compact: handoff, then clear, then the handoff loads automatically
+  into the fresh session. In the Desktop app Claude clears the session itself (you approve);
+  in the CLI/VS Code you type `/clear` and the reload happens automatically. Opt-in
+  `autoload_on_clear` (experimental) loads the latest open handoff on any `/clear`.
+- **Safety net:** before any compaction, a filtered digest of the session is saved and the
+  compacted session gets a one-line pointer to it.
+
+### Advisor (on by default, everywhere)
+
+- After a reply, when the context crosses **120K** (then **200K**) tokens, you see one line
+  (to you only, zero tokens): the size, an estimate per request on API billing, and a suggestion
+  to `/ctx-clean` or `/handoff` once the current piece of work is done. It's repeated every 10
+  turns, and never shown while Claude is asking you something.
+- Once per threshold, Claude also gets one line asking it to suggest switching *only* when a
+  unit of work is finished.
+- `/ctx-advisor off|on|status|threshold 150000 250000` (add `--global` for all sessions).
+  Billing (API vs subscription) is detected by a script; on a subscription it shows tokens, not dollars.
+
 ## Install
 
 Requirements: Claude Code, **Python 3.8+** on PATH (`python3`, `python` or `py -3`), and
@@ -55,6 +83,10 @@ Local development: `claude --plugin-dir ./plugins/ctx-kit`.
 | `/ctx audit` | Haiku checks drifted nodes against the code |
 | `/ctx search <words>` | Keyword search over nodes (zero tokens) |
 | `/ctx stamp <node>` | Mark a node as verified against the current code |
+| `/handoff [slug] [--force] [--split]` | Writes a lossless handoff + next-session prompt(s) |
+| `/pickup [id[:N]]` | Continues from a handoff |
+| `/ctx-clean [slug]` | Handoff, then clear, then automatic reload |
+| `/ctx-advisor on\|off\|status\|threshold` | Controls the session-size advisor |
 | `/ctx-feedback [note]` | Drafts a GitHub issue with diagnostics only (no code, no paths) for **you** to submit |
 
 ## Where things live
@@ -64,7 +96,8 @@ Local development: `claude --plugin-dir ./plugins/ctx-kit`.
 | Config | `.claude/ctx-kit.json` | global defaults in `~/.ctx-kit/config.json` |
 | Tree | `.claude/ctx/` | `.ctx/` (no permission prompts), or `~/.ctx-kit/trees/<repo>` (shared by all worktrees) |
 | Rules | `.claude/rules/ctx-*.md` | turn off with `ctx config set rules false` |
-| Session edit log | plugin data folder | never inside your repo |
+| Handoffs | `.claude/handoffs/` | asked once per workspace whether they stay local-only |
+| Session state (edit log, advisor, pending reloads) | plugin data folder | never inside your repo |
 
 **Local-only** (the default) adds those paths to `.git/info/exclude` (your personal ignore
 file, never committed) and puts the pointer in `CLAUDE.local.md`. Choose "committed" to
@@ -78,6 +111,12 @@ workspace storage each worktree would get its own tree. If you use worktrees, ch
 `script` write mode, the first time Claude runs the ctx command, choose
 **"Yes, and don't ask again"**. After that, tree writes don't prompt. In `tool` mode you
 approve "allow .claude edits for this session" once per session instead.
+
+## Roadmap
+
+- **Read-guard** (separate, opt-in): skip re-reads of unchanged files, *if* Claude Code doesn't already do this natively.
+- Better retrieval than keyword search; sharing a tree with a team.
+- PowerShell launcher for Windows machines without Git Bash.
 
 ## Privacy
 

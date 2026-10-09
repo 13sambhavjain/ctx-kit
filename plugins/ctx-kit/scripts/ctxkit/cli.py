@@ -13,14 +13,18 @@ Commands
   commit [-m MSG]                      commit the tree's nested git repo (if enabled)
   config [get KEY | set KEY VALUE]
   feedback [--note TEXT] [--kind observation|bug|idea]
-  hook <session-start|post-read|post-edit>
+  handoff check-setup | setup --local-only y|n | readiness --session ID | mine --session ID [--all]
+          | new --slug S --session ID | done <id> --session ID | list [--open] | show <id[:N]>
+          | consume <id> | pending <id> --session ID
+  advisor on|off|status [--session ID] [--global] | threshold SOFT [FIRM]
+  hook <session-start|session-end|pre-compact|post-read|post-edit|stop|prompt>
 """
 import argparse
 import json
 import os
 import sys
 
-from . import check, config, feedback, hooks, tree, util, writer
+from . import advisor, check, config, feedback, handoff, hooks, tree, util, writer
 
 
 def yn(v):
@@ -51,7 +55,10 @@ def cmd_init(ws, a):
 
 
 def cmd_w(ws, a):
-    if not ws.initialized:
+    if a.handoffs and not ws.configured:
+        print("ctx-kit: run `handoff setup` first", file=sys.stderr)
+        return 2
+    if not a.handoffs and not ws.initialized:
         print("ctx-kit: not initialized here; run init first", file=sys.stderr)
         return 2
     root = ws.handoffs_dir if a.handoffs else ws.ctx_root
@@ -154,6 +161,91 @@ def cmd_feedback(ws, a):
     return 0
 
 
+def cmd_handoff(ws, a):
+    data = config.plugin_data_dir(a.data)
+    act = a.action
+    if act == "check-setup":
+        print(handoff.ensure_setup(ws) or "OK")
+    elif act == "setup":
+        print(handoff.setup(ws, yn(a.local_only)))
+    elif act == "readiness":
+        print(json.dumps(handoff.readiness(ws, a.session, a.transcript), indent=2))
+    elif act == "mine":
+        status, paths = handoff.mine(ws, data, a.session, a.transcript, force_all=a.all)
+        print(status)
+        for p in paths:
+            print(p)
+    elif act == "new":
+        if not ws.configured:
+            print("FIRST_HANDOFF_IN_WORKSPACE (run `handoff setup --local-only y|n` first)", file=sys.stderr)
+            return 2
+        folder, meta = handoff.new(ws, a.slug, a.session)
+        print("id: %s" % meta["id"])
+        print("folder: %s" % util.rel(folder, ws.root))
+        print("write files with: w --handoffs write %s/HANDOFF.md (and %s/next-1-<part>.prompt.md)" % (meta["id"], meta["id"]))
+    elif act == "done":
+        handoff.mark_mined(ws, data, a.session, a.transcript)
+        h, prompt, _ = handoff.resolve(ws, a.ident)
+        if h and not h["prompts"]:
+            print("WARNING: %s has no next-*.prompt.md yet" % h["id"])
+        print("recorded: next handoff in this session starts after this point")
+    elif act == "list":
+        hs = handoff.list_handoffs(ws, only_open=a.open)
+        if not hs:
+            print("(no handoffs)")
+        for h in hs:
+            print("%s  [%s]  prompts: %s" % (h["id"], h["status"], ", ".join(h["prompts"]) or "-"))
+    elif act == "show":
+        h, prompt, cands = handoff.resolve(ws, a.ident)
+        if not h:
+            print("not found or ambiguous: %s" % ", ".join(c["id"] for c in cands) if cands else "not found")
+            return 1
+        print("id: %s  status: %s" % (h["id"], h["status"]))
+        print("handoff: %s" % util.rel(os.path.join(h["folder"], "HANDOFF.md"), ws.root))
+        if prompt:
+            print("prompt: %s\n-----" % util.rel(os.path.join(h["folder"], prompt), ws.root))
+            print(util.read_text(os.path.join(h["folder"], prompt)))
+    elif act == "consume":
+        r = handoff.set_status(ws, a.ident, "consumed")
+        print("consumed %s" % r if r else "not found")
+    elif act == "pending":
+        r = handoff.set_pending(ws, data, a.ident, a.session)
+        print("pending %s for the next /clear of this session" % r if r else "not found (needs a prompt file)")
+    return 0
+
+
+def cmd_advisor(ws, a):
+    data = config.plugin_data_dir(a.data)
+    if a.action in ("on", "off"):
+        flag = a.action == "on"
+        if a.glob or not a.session:
+            g = util.load_json(config.GLOBAL_CONFIG, {}) or {}
+            g["advisor"] = dict(g.get("advisor") or {}, enabled=flag)
+            util.save_json(config.GLOBAL_CONFIG, g)
+            print("advisor %s (global default)" % a.action)
+        else:
+            advisor.set_session(data, a.session, flag)
+            print("advisor %s for this session" % a.action)
+    elif a.action == "threshold":
+        g = util.load_json(config.GLOBAL_CONFIG, {}) or {}
+        adv = dict(g.get("advisor") or {})
+        adv["soft_tokens"] = int(a.values[0])
+        adv["firm_tokens"] = int(a.values[1]) if len(a.values) > 1 else max(int(a.values[0]) + 80000, int(a.values[0]))
+        g["advisor"] = adv
+        util.save_json(config.GLOBAL_CONFIG, g)
+        print("advisor thresholds: soft=%d firm=%d tokens" % (adv["soft_tokens"], adv["firm_tokens"]))
+    else:
+        st = advisor.load_state(data, a.session) if a.session else {}
+        adv = ws.get("advisor") or {}
+        print("advisor: %s (session override: %s)" % ("on" if adv.get("enabled", True) else "off",
+                                                       st.get("enabled", "none")))
+        print("thresholds: soft=%s firm=%s, repeat every %s turns" % (adv.get("soft_tokens"), adv.get("firm_tokens"), adv.get("every_turns")))
+        if st.get("tokens"):
+            print("last seen context: ~%dK tokens" % round(st["tokens"] / 1000.0))
+        print("billing: %s" % advisor.billing(ws))
+    return 0
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="ctx", description="ctx-kit")
     p.add_argument("--root", help="workspace root (default: auto)")
@@ -183,13 +275,27 @@ def build_parser():
     s = sub.add_parser("commit"); s.add_argument("-m", "--message")
     s = sub.add_parser("config"); s.add_argument("action", nargs="?", choices=["get", "set"]); s.add_argument("key", nargs="?"); s.add_argument("value", nargs="?")
     s = sub.add_parser("feedback"); s.add_argument("--note"); s.add_argument("--kind", default="observation", choices=["observation", "bug", "idea"])
+    s = sub.add_parser("handoff")
+    s.add_argument("action", choices=["check-setup", "setup", "readiness", "mine", "new", "done", "list", "show", "consume", "pending"])
+    s.add_argument("ident", nargs="?", default="")
+    s.add_argument("--session", default="")
+    s.add_argument("--transcript")
+    s.add_argument("--slug", default="session")
+    s.add_argument("--local-only", default="y")
+    s.add_argument("--all", action="store_true")
+    s.add_argument("--open", action="store_true")
+    s = sub.add_parser("advisor")
+    s.add_argument("action", nargs="?", default="status", choices=["on", "off", "status", "threshold"])
+    s.add_argument("values", nargs="*")
+    s.add_argument("--session", default="")
+    s.add_argument("--global", dest="glob", action="store_true")
     s = sub.add_parser("hook"); s.add_argument("event")
     return p
 
 
 CMDS = {"status": cmd_status, "init": cmd_init, "w": cmd_w, "index": cmd_index, "check": cmd_check,
         "stamp": cmd_stamp, "search": cmd_search, "touched": cmd_touched, "commit": cmd_commit,
-        "config": cmd_config, "feedback": cmd_feedback}
+        "config": cmd_config, "feedback": cmd_feedback, "handoff": cmd_handoff, "advisor": cmd_advisor}
 
 
 def main(argv=None):
@@ -216,7 +322,7 @@ def main(argv=None):
         print(__doc__)
         return 0
     ws = config.Workspace(a.root)
-    if not ws.initialized and a.cmd not in ("status", "init", "config", "feedback"):
+    if not ws.initialized and a.cmd not in ("status", "init", "config", "feedback", "handoff", "advisor", "w"):
         print("ctx-kit: not initialized in %s; run `/ctx-kit:ctx init` first." % ws.root, file=sys.stderr)
         return 2
     try:

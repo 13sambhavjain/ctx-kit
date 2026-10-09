@@ -1,4 +1,4 @@
-# ctx-kit test checklist (v0.1, context tree)
+# ctx-kit test checklist (v0.2)
 
 Write down **observations only**: what you did, what you saw, any error text. Don't copy
 code or project names. When you're done, run `/ctx-feedback <summary>` to draft an issue.
@@ -34,9 +34,22 @@ code or project names. When you're done, run `/ctx-feedback <summary>` to draft 
 - [ ] Rename the function without changing its body. `/ctx check` should report RENAMED, and `--fix` should update the node.
 - [ ] Ask Claude to read that node. Did it get the "may be stale" warning?
 
-## 6. Feedback loop
+## 6. Handoff
+- [ ] In any project, `/handoff` while a task is clearly unfinished. Did it refuse and explain? Then `/handoff --force`.
+- [ ] First time only: did it ask whether handoffs stay local-only?
+- [ ] Open `.claude/handoffs/<id>/HANDOFF.md`. Is anything important from the session missing?
+- [ ] New session: `/pickup`. Did it list or load the handoff and continue sensibly?
+- [ ] `/ctx-clean` near the end of a task. **Desktop:** were you asked to approve clearing, and did the new session start with the handoff loaded? **CLI/VS Code:** after typing `/clear`, was it loaded?
+- [ ] A plain `/clear` (without `/ctx-clean`) must **not** load anything.
+
+## 7. Advisor
+- [ ] `/ctx-advisor threshold 20000 40000`, then work a bit. Did a one-line note appear under a reply (not mid-work)? Where did it render in your app?
+- [ ] `/ctx-advisor off` silences it. `/ctx-advisor status` shows billing as api or subscription. Is that right for your office setup?
+- [ ] Reset with `/ctx-advisor threshold 120000 200000`.
+
+## 8. Feedback loop
 - [ ] `/ctx-feedback first impressions…`. Check the draft has **no paths, code or project names**, then open the link and submit it (or paste the saved draft into a new issue).
 
 ## Known gaps in v0.1
 - Hooks run through `sh`. On Windows without Git Bash they won't run (write down what happens).
-- Handoff, `/ctx-clean` and the advisor are not in this version yet.
+- If your Claude Code session compacts, check `.claude/handoffs/.checkpoints/` for a digest. Note whether `/handoff` afterwards said `CHUNKS` (mining ran).
