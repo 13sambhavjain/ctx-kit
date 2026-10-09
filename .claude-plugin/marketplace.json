@@ -1,0 +1,14 @@
+{
+  "name": "sambhav-plugins",
+  "owner": { "name": "13sambhavjain" },
+  "description": "Personal Claude Code plugins for managing context and cost.",
+  "plugins": [
+    {
+      "name": "ctx-kit",
+      "source": "./plugins/ctx-kit",
+      "description": "Context tree loaded on demand, decisions as ADRs, zero-token drift/rename checks; handoff and advisor coming.",
+      "category": "productivity",
+      "tags": ["context", "memory", "tokens"]
+    }
+  ]
+}

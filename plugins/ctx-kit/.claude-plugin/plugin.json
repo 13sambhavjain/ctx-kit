@@ -1,0 +1,18 @@
+{
+  "name": "ctx-kit",
+  "displayName": "ctx-kit",
+  "version": "0.1.0",
+  "description": "Context tree for Claude Code: a small INDEX plus topic nodes loaded on demand, decisions as ADRs, zero-token drift and rename checks. Handoff and session advisor coming next.",
+  "author": { "name": "13sambhavjain" },
+  "repository": "https://github.com/OWNER/REPO",
+  "license": "MIT",
+  "keywords": ["context", "memory", "documentation", "handoff", "tokens"],
+  "userConfig": {
+    "python_cmd": {
+      "type": "string",
+      "title": "Python command (optional)",
+      "description": "Command that runs Python 3.8+, e.g. python, py -3, or a full path. Leave empty to auto-detect (python3, python, py -3).",
+      "default": ""
+    }
+  }
+}

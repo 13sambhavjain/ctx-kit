@@ -1,0 +1,16 @@
+name: Observation
+description: Something you noticed while using ctx-kit (good or bad)
+labels: [observation]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you observe?
+      description: No proprietary code, file contents or company/project names, please.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Windows 11 / Git Bash / Python 3.12 / Claude Code desktop 2.1.x"

@@ -1,0 +1,10 @@
+name: Idea
+description: A suggestion or improvement
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea, and the problem it solves
+    validations:
+      required: true

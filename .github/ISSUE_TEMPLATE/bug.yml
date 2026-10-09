@@ -1,0 +1,15 @@
+name: Bug
+description: Something broke or behaved wrongly
+labels: [bug]
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: What did you do, what happened, what did you expect?
+      description: No proprietary code or paths, please. `/ctx-feedback` fills diagnostics for you.
+    validations:
+      required: true
+  - type: textarea
+    id: diag
+    attributes:
+      label: Diagnostics (from /ctx-feedback or `ctx status`)
