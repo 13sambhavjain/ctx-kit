@@ -290,6 +290,10 @@ def init(ws, storage, local_only, nested_git, write_mode, review, rules=True, ov
         report.append(add_excludes(ws))
     if nested_git:
         report.append(init_nested_git(ws))
+    if not local_only:
+        report.append("NOTE: this tree is committed with the project (shared). ctx-kit doesn't yet handle team "
+                      "use: concurrent edits by several people, merge conflicts in nodes, or review of others' "
+                      "changes. Fine for one person; for a team, agree on who updates the tree for now.")
     n = ws.worktree_count()
     if n > 1 and storage != "home":
         report.append("WARNING: this repo has %d worktrees. With storage=%s each worktree gets its own "
@@ -304,6 +308,7 @@ INDEX and then only the nodes relevant to the task (follow its routing table).
 Facts live in one node each; decisions live in `decisions/`. Nodes are plain links,
 never imports, so they cost nothing until opened. When you learn something durable
 (a fact, a flow, a decision and its reason), record it with `/ctx update`.
+To search the tree use `/ctx search <words>`{grep_note}.
 {end}
 """
 
@@ -316,7 +321,9 @@ def snippet_target(ws):
 def write_snippet(ws):
     p = snippet_target(ws)
     index_link = node_link_from_root(ws, INDEX)
-    snip = SNIPPET.format(start=SNIP_START, end=SNIP_END, index=index_link)
+    grep_note = (" (Grep skips git-excluded files, so a repo-wide Grep won't see this local-only tree; "
+                 "if you Grep, pass the tree folder as the path)") if ws.get("local_only") else ""
+    snip = SNIPPET.format(start=SNIP_START, end=SNIP_END, index=index_link, grep_note=grep_note)
     text = util.read_text(p) if os.path.exists(p) else ""
     if SNIP_START in text and SNIP_END in text:
         a = text.index(SNIP_START)
@@ -349,24 +356,32 @@ def add_excludes(ws):
 
 
 def init_nested_git(ws):
+    from . import autocommit
     if not config.has_git():
         ws.save({"nested_git": False})
         return "nested git: skipped (git not installed); recorded nested_git=false"
-    root = ws.ctx_root
     if not ws.get("local_only") and ws.get("storage") != "home":
         ws.save({"nested_git": False})
         return "nested git: skipped (tree is committed with the project, so the project's git already versions it)"
-    if not os.path.isdir(os.path.join(root, ".git")):
-        if config.git(["init", "-q"], root) is None:
-            return "nested git: git init failed"
+    r = autocommit.init_repo(ws.ctx_root)
+    if r != "ok":
+        return "nested git: %s" % r
     return commit(ws, "ctx init")
 
 
-def commit(ws, message):
-    if not ws.get("nested_git") or not os.path.isdir(os.path.join(ws.ctx_root, ".git")):
-        return "commit: skipped (nested git off)"
-    root = ws.ctx_root
-    config.git(["add", "-A"], root)
-    out = config.git(["-c", "user.name=ctx-kit", "-c", "user.email=ctx-kit@localhost",
-                      "commit", "-q", "-m", message], root)
-    return "commit: %s" % ("done" if out is not None else "nothing to commit")
+def commit(ws, message, allow_protected=False, data=None):
+    """Commit tree (and handoff) history now, with the given message."""
+    from . import autocommit
+    rts = autocommit.roots(ws)
+    if not rts:
+        return "commit: skipped (no nested history; enable with init --nested-git y)"
+    done, warns = [], []
+    for label, root, ignore in rts:
+        s_, w = autocommit.commit_root(ws, label, root, "", message, data, allow_protected, ignore)
+        if s_:
+            done.append(label)
+        warns += w
+    out = "commit: %s" % (", ".join(done) if done else "nothing to commit")
+    if warns:
+        out += "\nWARNING: " + "\nWARNING: ".join(warns)
+    return out

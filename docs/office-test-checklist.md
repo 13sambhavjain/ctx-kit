@@ -1,7 +1,8 @@
-# ctx-kit test checklist (v0.2)
+# ctx-kit test checklist (v0.3)
 
 Write down **observations only**: what you did, what you saw, any error text. Don't copy
-code or project names. When you're done, run `/ctx-feedback <summary>` to draft an issue.
+code or project names. Easiest: type `ctx-note: <what happened>` in the chat at any time. It's saved
+on the laptop and costs no tokens. At the end, type `ctx-notes` and photograph the screen.
 
 ## 0. Before you start
 - [ ] `python --version`, `python3 --version` and `py -3 --version`: which ones work? (On Windows, `python3` may open the Microsoft Store; that's expected, the plugin skips it.)
@@ -54,8 +55,18 @@ code or project names. When you're done, run `/ctx-feedback <summary>` to draft 
 - [ ] Did Claude ever get confused by a stub or diff (re-reading in a loop, or "can't see the file")? Note it.
 - [ ] After a normal day of coding: `/read-guard stats`. Copy the numbers into feedback; they decide whether Bash de-dup is worth building.
 
-## 9. Feedback loop
-- [ ] `/ctx-feedback first impressions…`. Check the draft has **no paths, code or project names**, then open the link and submit it (or paste the saved draft into a new issue).
+## 9. v0.3 additions
+- [ ] Type `ctx-note: test`. Did you get "note #1 saved" **without** Claude replying? Then `ctx-notes`: is the screen readable in a photo?
+- [ ] In a project that already has a CLAUDE.md or docs folder: `/ctx import`. Did it list files and sections with token estimates, ask before touching CLAUDE.md, and create **draft** nodes?
+- [ ] With history on: after a turn that changed a node, run `git -C .claude/ctx log -3 --stat`. Are there auto-commits with useful messages?
+- [ ] `/ctx check --diff`. Do drift lines name the commits, and show the code change?
+- [ ] Set `protected_tags`, then ask Claude to delete a tagged line. Was it refused, or flagged and held back from the commit?
+
+- [ ] Existing office tree: run `ctx mark-legacy-draft` (through `/ctx`) and `ctx handoff setup --local-only y --history y`. Note what changed.
+- [ ] Remove a tagged line in a node by hand. Was there **one** warning (not every turn), with the fix in it?
+
+## 10. Feedback loop
+- [ ] `ctx-notes`, then photograph the screen. It must contain **no paths, code or project names**.
 
 ## Known gaps in v0.1
 - Hooks run through `sh`. On Windows without Git Bash they won't run (write down what happens).

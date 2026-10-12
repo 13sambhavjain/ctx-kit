@@ -10,7 +10,8 @@ A Claude Code plugin that keeps your project's context in a **tree of small mark
 files that Claude loads only when it needs them**. Lower token cost per session, and a
 readable, versionable record of how the project works and why decisions were made.
 
-> Status: **v0.2**: context tree, handoff, and session-size advisor. Each part works on its own.
+> Status: **v0.3**: context tree (with auto-history, import, precise checks), handoff, session-size advisor,
+> and feedback notes that never leave your machine. Each part works on its own.
 
 ## What you get
 
@@ -33,6 +34,20 @@ readable, versionable record of how the project works and why decisions were mad
   step, merging into existing nodes rather than duplicating.
 - **`/ctx audit`** runs a cheap Haiku subagent only on drifted nodes; it fixes mechanical
   things (names, paths, signatures) and only *reports* changes in meaning.
+- **Auto-history.** With "history" on, the tree (and handoffs) are committed to their own nested git
+  repo at the end of every turn, with a generated message (nodes, +/- lines, sections touched, session).
+  No model tokens, and nothing depends on remembering to commit.
+- **`/ctx import`** adopts an existing `CLAUDE.md`, `.claude/rules`, nested `CLAUDE.md` files or a docs
+  folder. Imported text lands as `draft` (never silently "verified"), `@imports` are turned into lazy links,
+  and shared files are only edited with your OK.
+- **Precise checks:** drift names the commits that changed the code (`check --diff` shows the change),
+  line anchors (`file.py#L10-L20`) are validated, backticked paths that no longer exist are flagged, nodes
+  edited but not re-verified are flagged, and oversized nodes get a split warning.
+- **Protected lines:** set `protected_tags` (e.g. `["[SJ]"]`). Lines with that tag can't be removed by
+  ctx-kit's writer without your OK, a removal made any other way is flagged by `check`, and it is held
+  back from auto-commit.
+- **Update nudge:** after many code edits in a session with no tree update, you get one line suggesting
+  `/ctx update` (zero tokens).
 - **Safe writes.** Claude writes through a small script that only accepts paths inside the
   tree, refuses config-like files, redacts secrets, and won't overwrite on stale edits.
 
@@ -94,7 +109,9 @@ Local development: `claude --plugin-dir ./plugins/ctx-kit`.
 | `/pickup [id[:N]]` | Continues from a handoff |
 | `/ctx-clean [slug]` | Handoff, then clear, then automatic reload |
 | `/ctx-advisor on\|off\|status\|threshold` | Controls the session-size advisor |
-| `/ctx-feedback [note]` | Drafts a GitHub issue with diagnostics only (no code, no paths) for **you** to submit |
+| `/ctx import [docs…]` | Adopts an existing CLAUDE.md, rules or docs into draft nodes |
+| `ctx-note: <text>` / `ctx-notes` (typed in chat) | Saves or shows feedback notes **without using any tokens** (a hook intercepts them) |
+| `/ctx-feedback [note]` | Same, with Claude adding plugin-behaviour context; prints a photo-friendly report |
 
 ## Where things live
 
@@ -105,6 +122,12 @@ Local development: `claude --plugin-dir ./plugins/ctx-kit`.
 | Rules | `.claude/rules/ctx-*.md` | turn off with `ctx config set rules false` |
 | Handoffs | `.claude/handoffs/` | asked once per workspace whether they stay local-only |
 | Session state (edit log, advisor, pending reloads) | plugin data folder | never inside your repo |
+
+**CLAUDE.md vs CLAUDE.local.md.** Local-only puts the pointer in `CLAUDE.local.md` (Claude Code's
+personal instructions file, loaded *alongside* `CLAUDE.md`). The tree it points to isn't committed, so a
+pointer in the shared `CLAUDE.md` would send teammates to a file they don't have. A committed tree puts
+the pointer in `CLAUDE.md`. Either way ctx-kit only appends one marked block; the rest of the file is
+never touched. To move existing `CLAUDE.md` content into the tree, use `/ctx import`.
 
 **Local-only** (the default) adds those paths to `.git/info/exclude` (your personal ignore
 file, never committed) and puts the pointer in `CLAUDE.local.md`. Choose "committed" to
@@ -119,15 +142,30 @@ workspace storage each worktree would get its own tree. If you use worktrees, ch
 **"Yes, and don't ask again"**. After that, tree writes don't prompt. In `tool` mode you
 approve "allow .claude edits for this session" once per session instead.
 
+## Upgrading an existing setup to v0.3
+
+- **Tree history:** if `init` ran with history off, enable it with
+  `ctx config set nested_git true` and run `/ctx init` again (idempotent: existing nodes are kept).
+- **Handoff history:** rerun `ctx handoff setup --local-only y --history y`.
+- **Nodes migrated before v0.3** may be marked `current` without ever being verified. Run
+  `ctx mark-legacy-draft` to turn them back into drafts, then `/ctx audit` them gradually.
+- `ctx check --docs` also finds text duplicated between the tree and the repo's own markdown docs.
+
 ## Roadmap
+
+- **Team mode.** A committed (not local-only) tree works for one person today. Sharing with a team needs
+  conventions for concurrent edits, merge conflicts in nodes, and reviewing others' changes. Not designed yet.
 
 - Better retrieval than keyword search; sharing a tree with a team.
 - PowerShell launcher for Windows machines without Git Bash.
 
-## Privacy
+## Privacy and feedback
 
-Everything stays on your machine. ctx-kit makes no network calls. `/ctx-feedback` only
-prints a link; you decide whether to open and submit it.
+Everything stays on your machine. ctx-kit makes no network calls. Feedback notes (`ctx-note:`,
+`/ctx-feedback`) are saved locally (if the hook can't run, for example no Python, a typed `ctx-note:` reaches
+Claude as a normal message instead, so keep notes free of anything sensitive) and shown as one compact screen you can photograph. Nothing is
+sent anywhere. Setting `feedback_github` to `true` adds a prefilled GitHub issue link for machines
+where you're logged in.
 
 ## Development
 

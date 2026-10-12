@@ -89,7 +89,42 @@ def apply_replace(text, spec):
     return text, len(blocks), sorted(set(kinds))
 
 
-def run(root, op, args, stdin_text, overwrite=False):
+def _protected_lost(old_text, new_text, tags):
+    if not tags:
+        return []
+    norm = lambda x: re.sub(r"\s+", " ", x).strip()
+    keep = set(norm(l) for l in new_text.splitlines())
+    return [l.strip() for l in old_text.splitlines() if any(t in l for t in tags) and norm(l) not in keep]
+
+
+def _elsewhere(root, target):
+    """Normalised lines of every other markdown file in the folder (a moved line is not lost)."""
+    seen = set()
+    for dp, dns, fns in os.walk(root):
+        dns[:] = [d for d in dns if d not in (".git", ".trash")]
+        for f in fns:
+            p = os.path.join(dp, f)
+            if f.endswith(".md") and os.path.abspath(p) != os.path.abspath(target):
+                try:
+                    seen.update(re.sub(r"\s+", " ", l).strip() for l in util.read_text(p).splitlines())
+                except OSError:
+                    pass
+    return seen
+
+
+def _guard(old_text, new_text, tags, allow, relpath, root=None, target=None):
+    lost = _protected_lost(old_text, new_text, tags)
+    if lost and root:
+        other = _elsewhere(root, target)
+        lost = [l for l in lost if re.sub(r"\s+", " ", l).strip() not in other]
+    if lost and not allow:
+        raise WriteError("refusing to remove protected line(s) in %s (tags %s): %s\n"
+                         "Keep them (to move one, write it into the other node first), or ask the user "
+                         "and rerun with --allow-protected."
+                         % (relpath, ", ".join(tags), " | ".join(l[:80] for l in lost[:3])))
+
+
+def run(root, op, args, stdin_text, overwrite=False, protected=(), allow_protected=False):
     """Execute one op. Returns a short human message. Raises WriteError."""
     if op in ("write", "append", "replace"):
         if len(args) != 1:
@@ -103,6 +138,8 @@ def run(root, op, args, stdin_text, overwrite=False):
         if op == "write":
             if os.path.exists(target) and not overwrite:
                 raise WriteError("exists: %s (use replace, or write --overwrite)" % args[0])
+            if os.path.exists(target):
+                _guard(util.read_text(target), content, protected, allow_protected, args[0], root, target)
             util.atomic_write(target, content if content.endswith("\n") else content + "\n")
             return "wrote %s%s" % (args[0], note)
         if op == "append":
@@ -112,7 +149,9 @@ def run(root, op, args, stdin_text, overwrite=False):
             return "appended to %s%s" % (args[0], note)
         if not os.path.exists(target):
             raise WriteError("no such file: %s" % args[0])
-        new_text, n, kinds = apply_replace(util.read_text(target), content)
+        old_text = util.read_text(target)
+        new_text, n, kinds = apply_replace(old_text, content)
+        _guard(old_text, new_text, protected, allow_protected, args[0], root, target)
         util.atomic_write(target, new_text)
         note = (" (redacted: %s)" % ", ".join(kinds)) if kinds else ""
         return "replaced %d block(s) in %s%s" % (n, args[0], note)
@@ -133,6 +172,8 @@ def run(root, op, args, stdin_text, overwrite=False):
         a = safe_path(root, args[0])
         if not os.path.exists(a):
             raise WriteError("no such file: %s" % args[0])
+        if os.path.isfile(a):
+            _guard(util.read_text(a), "", protected, allow_protected, args[0], root, a)
         trash = os.path.join(root, ".trash", util.now_iso().replace(":", ""))
         os.makedirs(trash, exist_ok=True)
         shutil.move(a, os.path.join(trash, os.path.basename(a)))

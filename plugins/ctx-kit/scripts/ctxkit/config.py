@@ -24,19 +24,28 @@ DEFAULTS = {
     "autoload_on_clear": False,  # experimental (M2)
     "advisor": {"enabled": True, "soft_tokens": 120000, "firm_tokens": 200000, "every_turns": 10},
     "billing": "auto",           # auto | api | subscription
+    "auto_commit": True,         # commit tree/handoff history at end of each turn (needs nested_git)
+    "protected_tags": [],        # e.g. ["[SJ]"]: tagged lines may not be removed without approval
+    "max_node_kb": 12,           # warn above this size; split big nodes
+    "update_nudge_edits": 15,    # code edits in a session without a tree update -> one note to the user
+    "feedback_github": False,    # /ctx-feedback also prints a prefilled GitHub issue link
 }
 
 
-def git(args, cwd, timeout=10):
-    """Run git; return stdout (stripped) or None if git is missing/fails."""
+def git(args, cwd, timeout=10, raw=False):
+    """Run git; return stdout (stripped, or as-is with raw=True) or None if git is missing/fails.
+
+    Output is decoded as UTF-8 (git's own encoding; the Windows default codepage would garble or
+    crash on non-ASCII), and paths are not C-quoted, so non-ASCII file names come through intact.
+    """
     try:
-        r = subprocess.run(["git"] + list(args), cwd=cwd, capture_output=True,
-                           text=True, timeout=timeout)
-    except (OSError, subprocess.SubprocessError):
+        r = subprocess.run(["git", "-c", "core.quotepath=off"] + list(args), cwd=cwd, capture_output=True,
+                           text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except (OSError, subprocess.SubprocessError, ValueError):
         return None
     if r.returncode != 0:
         return None
-    return r.stdout.strip()
+    return r.stdout if raw else r.stdout.strip()
 
 
 def has_git():
@@ -136,10 +145,27 @@ class Workspace:
 
 
 def plugin_data_dir(explicit=None):
+    """Where hooks keep session state. Hooks get $CLAUDE_PLUGIN_DATA; commands Claude runs via Bash
+    don't, so fall back to the installed plugin's data folder before a private default."""
     d = explicit or os.environ.get("CLAUDE_PLUGIN_DATA")
-    if not d:
-        d = os.path.join(HOME_DIR, "data")
-    return d
+    if d:
+        return d
+    base = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude"),
+                        "plugins", "data")
+    try:
+        cands = [os.path.join(base, n) for n in os.listdir(base) if n.startswith("ctx-kit")]
+    except OSError:
+        cands = []
+    if cands:
+        def activity(d):
+            ts = [os.path.getmtime(d)]
+            for sub in ("sessions", "advisor", "feedback"):
+                p = os.path.join(d, sub)
+                if os.path.isdir(p):
+                    ts.append(os.path.getmtime(p))
+            return max(ts)
+        return max(cands, key=activity)
+    return os.path.join(HOME_DIR, "data")
 
 
 def plugin_root():

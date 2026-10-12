@@ -95,10 +95,17 @@ def _exclude(ws, entries, header):
     return True
 
 
-def setup(ws, local_only):
-    """Record the one-time handoff preference; exclude from git when local-only."""
-    ws.save({"handoffs_local_only": bool(local_only)})
+def setup(ws, local_only, history=False):
+    """Record the one-time handoff preferences; exclude from git when local-only; optional history."""
+    ws.save({"handoffs_local_only": bool(local_only), "handoffs_history": bool(history)})
     msg = "handoffs: %s" % util.rel(ws.handoffs_dir, ws.root)
+    if history:
+        from . import autocommit
+        if not local_only:
+            msg += " (history skipped: committed handoffs are already versioned by the project's git)"
+        else:
+            r = autocommit.init_repo(ws.handoffs_dir, autocommit.HANDOFF_IGNORE)
+            msg += " (history: %s)" % ("nested git, auto-committed each turn" if r == "ok" else r)
     if local_only:
         entries = ["/" + util.rel(ws.handoffs_dir, ws.root) + "/", "/" + util.rel(ws.config_path, ws.root)]
         if _exclude(ws, entries, "# ctx-kit handoffs (local-only)"):

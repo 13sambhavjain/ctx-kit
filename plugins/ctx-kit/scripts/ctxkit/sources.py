@@ -22,6 +22,19 @@ MAX_FILE_BYTES = 1_500_000
 KW = r"(?:export\s+|default\s+|public\s+|private\s+|protected\s+|internal\s+|static\s+|final\s+|abstract\s+|async\s+|override\s+|virtual\s+|sealed\s+|partial\s+|inline\s+|pub(?:\([^)]*\))?\s+|const\s+|unsafe\s+|extern\s+)*"
 
 
+LINE_ANCHOR = re.compile(r"^L(\d+)(?:-L?(\d+))?$")
+
+
+def line_range(sym):
+    """'L10' -> (10, 10); 'L10-L20' / 'L10-20' -> (10, 20); else None."""
+    m = LINE_ANCHOR.match(sym or "")
+    if not m:
+        return None
+    a = int(m.group(1))
+    b = int(m.group(2) or a)
+    return (min(a, b), max(a, b))
+
+
 def parse_anchor(anchor):
     anchor = anchor.strip()
     if "#" in anchor:
@@ -147,6 +160,12 @@ def anchor_hash(repo_root, anchor):
         return "missing"
     if not sym:
         return util.sha(_norm(text))
+    lr = line_range(sym)
+    if lr:
+        lines = text.splitlines()
+        if lr[1] > len(lines):
+            return "missing"  # e.g. #L441 in a file that now has 427 lines
+        return "l" + util.sha("\n".join(l.rstrip() for l in lines[lr[0] - 1:lr[1]]), 11)
     body = symbol_body(path, text, sym)
     if body is None:
         return "missing"
@@ -177,6 +196,8 @@ def find_moved(repo_root, anchor, old_hash):
     """
     path, sym = parse_anchor(anchor)
     ext = os.path.splitext(path)[1].lower()
+    if sym and line_range(sym):
+        return "gone", []  # line anchors can't be followed; use path#Symbol for robust anchors
     if not sym:
         # whole file moved? match by content hash
         if not old_hash or old_hash == "missing":

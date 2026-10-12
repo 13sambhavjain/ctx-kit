@@ -6,13 +6,16 @@ Commands
        [--review ask|auto] [--no-rules] [--overview TEXT]
   w <write|append|replace|mv|rm> <path> [path2] [--overwrite]   (content on stdin)
   index                                regenerate INDEX + rules
-  check [--fix] [--json] [node ...]    drift / renames / links / duplicates (zero tokens)
   stamp <node ...>                     mark nodes verified against current code
   search <words ...>                   keyword search over nodes
   touched [--session ID]               files changed by a session (from hooks)
   commit [-m MSG]                      commit the tree's nested git repo (if enabled)
   config [get KEY | set KEY VALUE]
-  feedback [--note TEXT] [--kind observation|bug|idea]
+  feedback [--note TEXT] [--kind observation|bug|idea]   (saves locally + prints a photo-friendly report)
+  notes [show | add TEXT | clear]       local feedback notes (also: type `ctx-note: ...` / `ctx-notes` in chat)
+  import-scan [docs paths ...]          inventory existing CLAUDE.md / rules / docs for /ctx import
+  mark-legacy-draft                     nodes marked current but never stamped by v0.3 -> draft (to re-audit)
+  check [--fix] [--diff] [--docs] [--json] [node ...]
   handoff check-setup | setup --local-only y|n | readiness --session ID | mine --session ID [--all]
           | new --slug S --session ID | done <id> --session ID | list [--open] | show <id[:N]>
           | consume <id> | pending <id> --session ID
@@ -24,7 +27,7 @@ import json
 import os
 import sys
 
-from . import advisor, check, config, feedback, handoff, hooks, tree, util, writer
+from . import advisor, check, config, feedback, handoff, hooks, importer, tree, util, writer
 
 
 def yn(v):
@@ -64,7 +67,8 @@ def cmd_w(ws, a):
     root = ws.handoffs_dir if a.handoffs else ws.ctx_root
     try:
         msg = writer.run(root, a.op, a.paths, writer.read_stdin() if a.op in ("write", "append", "replace") else "",
-                         overwrite=a.overwrite)
+                         overwrite=a.overwrite, protected=ws.get("protected_tags") or [],
+                         allow_protected=a.allow_protected)
     except writer.WriteError as e:
         print("ctxw: ERROR: %s" % e, file=sys.stderr)
         return 1
@@ -77,13 +81,14 @@ def cmd_w(ws, a):
 
 def cmd_index(ws, a):
     print(util.rel(tree.write_index(ws), ws.root))
+    print(tree.write_snippet(ws))
     for r in tree.write_rules(ws):
         print("rule: .claude/rules/%s" % r)
     return 0
 
 
 def cmd_check(ws, a):
-    lines, counts = check.run_check(ws, fix=a.fix, only=a.nodes or None)
+    lines, counts = check.run_check(ws, fix=a.fix, only=a.nodes or None, diff=a.diff, docs=a.docs)
     if a.json:
         print(json.dumps({"issues": lines, "counts": counts}, indent=2))
     else:
@@ -110,7 +115,10 @@ def cmd_search(ws, a):
 
 def cmd_touched(ws, a):
     d = os.path.join(config.plugin_data_dir(a.data), "sessions")
-    sids = [a.session] if a.session else (sorted(os.listdir(d), key=lambda s: os.path.getmtime(os.path.join(d, s)))[-1:] if os.path.isdir(d) else [])
+    sids = [a.session] if a.session else []
+    if not sids and os.path.isdir(d):
+        withedits = [x for x in os.listdir(d) if os.path.exists(os.path.join(d, x, "touched.txt"))]
+        sids = sorted(withedits, key=lambda x: os.path.getmtime(os.path.join(d, x, "touched.txt")))[-1:]
     files = []
     for sid in sids:
         p = os.path.join(d, sid, "touched.txt")
@@ -124,7 +132,31 @@ def cmd_touched(ws, a):
 
 
 def cmd_commit(ws, a):
-    print(tree.commit(ws, a.message or "ctx update"))
+    print(tree.commit(ws, a.message or "ctx update", allow_protected=a.allow_protected,
+                      data=config.plugin_data_dir(a.data)))
+    return 0
+
+
+def cmd_mark_legacy_draft(ws, a):
+    ch = check.mark_legacy_draft(ws)
+    print("set to draft (marked current but never verified with a v0.3 stamp): %s" % (", ".join(ch) if ch else "none"))
+    return 0
+
+
+def cmd_import_scan(ws, a):
+    print(importer.scan(ws, a.paths))
+    return 0
+
+
+def cmd_notes(ws, a):
+    if a.action == "add":
+        n = feedback.add_note(ws, a.data, " ".join(a.text), a.kind)
+        print("note #%d saved on this machine" % n)
+    elif a.action == "clear":
+        feedback.clear_notes(a.data)
+        print("notes archived")
+    else:
+        print(feedback.photo_report(ws, a.data, full=True))
     return 0
 
 
@@ -138,6 +170,12 @@ def cmd_config(ws, a):
             v = v == "true"
         elif v is not None and v.isdigit():
             v = int(v)
+        elif v is not None and v.strip()[:1] in "[{":
+            try:
+                v = json.loads(v)
+            except ValueError:
+                print("not valid JSON: %s" % v, file=sys.stderr)
+                return 1
         ws.save({a.key: v})
         print("set %s = %r" % (a.key, v))
         return 0
@@ -145,6 +183,12 @@ def cmd_config(ws, a):
 
 
 def cmd_feedback(ws, a):
+    if not ws.get("feedback_github"):
+        if a.note:
+            n = feedback.add_note(ws, a.data, a.note, a.kind)
+            print("note #%d saved on this machine (nothing is sent anywhere)" % n)
+        print(feedback.photo_report(ws, a.data, full=True))
+        return 0
     title, body, url, kinds = feedback.build(ws, a.data, a.note or "", a.kind)
     print("TITLE: " + title)
     print("----- DRAFT (review before sending) -----")
@@ -167,7 +211,7 @@ def cmd_handoff(ws, a):
     if act == "check-setup":
         print(handoff.ensure_setup(ws) or "OK")
     elif act == "setup":
-        print(handoff.setup(ws, yn(a.local_only)))
+        print(handoff.setup(ws, yn(a.local_only), yn(a.history)))
     elif act == "readiness":
         print(json.dumps(handoff.readiness(ws, a.session, a.transcript), indent=2))
     elif act == "mine":
@@ -267,12 +311,16 @@ def build_parser():
     s.add_argument("--overwrite", action="store_true")
     s.add_argument("--handoffs", action="store_true", help="target the handoffs folder instead of the tree")
     s.add_argument("--no-index", action="store_true")
+    s.add_argument("--allow-protected", action="store_true", help="user approved removing protected-tag lines")
     sub.add_parser("index")
-    s = sub.add_parser("check"); s.add_argument("--fix", action="store_true"); s.add_argument("--json", action="store_true"); s.add_argument("nodes", nargs="*")
+    s = sub.add_parser("check"); s.add_argument("--fix", action="store_true"); s.add_argument("--json", action="store_true"); s.add_argument("--diff", action="store_true"); s.add_argument("--docs", action="store_true", help="also compare with the repo's own markdown docs"); s.add_argument("nodes", nargs="*")
     s = sub.add_parser("stamp"); s.add_argument("nodes", nargs="+")
     s = sub.add_parser("search"); s.add_argument("words", nargs="+"); s.add_argument("--limit", type=int, default=8)
     s = sub.add_parser("touched"); s.add_argument("--session")
-    s = sub.add_parser("commit"); s.add_argument("-m", "--message")
+    s = sub.add_parser("commit"); s.add_argument("-m", "--message"); s.add_argument("--allow-protected", action="store_true")
+    s = sub.add_parser("import-scan"); s.add_argument("paths", nargs="*")
+    sub.add_parser("mark-legacy-draft")
+    s = sub.add_parser("notes"); s.add_argument("action", nargs="?", default="show", choices=["show", "add", "clear"]); s.add_argument("text", nargs="*"); s.add_argument("--kind", default="note")
     s = sub.add_parser("config"); s.add_argument("action", nargs="?", choices=["get", "set"]); s.add_argument("key", nargs="?"); s.add_argument("value", nargs="?")
     s = sub.add_parser("feedback"); s.add_argument("--note"); s.add_argument("--kind", default="observation", choices=["observation", "bug", "idea"])
     s = sub.add_parser("handoff")
@@ -282,6 +330,7 @@ def build_parser():
     s.add_argument("--transcript")
     s.add_argument("--slug", default="session")
     s.add_argument("--local-only", default="y")
+    s.add_argument("--history", default="n")
     s.add_argument("--all", action="store_true")
     s.add_argument("--open", action="store_true")
     s = sub.add_parser("advisor")
@@ -295,7 +344,8 @@ def build_parser():
 
 CMDS = {"status": cmd_status, "init": cmd_init, "w": cmd_w, "index": cmd_index, "check": cmd_check,
         "stamp": cmd_stamp, "search": cmd_search, "touched": cmd_touched, "commit": cmd_commit,
-        "config": cmd_config, "feedback": cmd_feedback, "handoff": cmd_handoff, "advisor": cmd_advisor}
+        "config": cmd_config, "feedback": cmd_feedback, "handoff": cmd_handoff, "advisor": cmd_advisor,
+        "import-scan": cmd_import_scan, "notes": cmd_notes, "mark-legacy-draft": cmd_mark_legacy_draft}
 
 
 def main(argv=None):
@@ -322,7 +372,8 @@ def main(argv=None):
         print(__doc__)
         return 0
     ws = config.Workspace(a.root)
-    if not ws.initialized and a.cmd not in ("status", "init", "config", "feedback", "handoff", "advisor", "w"):
+    if not ws.initialized and a.cmd not in ("status", "init", "config", "feedback", "handoff", "advisor", "w",
+                                             "notes", "import-scan"):
         print("ctx-kit: not initialized in %s; run `/ctx-kit:ctx init` first." % ws.root, file=sys.stderr)
         return 2
     try:

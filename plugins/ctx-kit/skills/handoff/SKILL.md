@@ -17,9 +17,10 @@ a question to the user unanswered)? If work is unfinished, say briefly what, sug
 first, and STOP. The user can rerun with `--force`. `git_dirty` is only a hint; uncommitted work is fine.
 
 ## 2. First handoff in this workspace?
-`CTX handoff check-setup`. If it prints `FIRST_HANDOFF_IN_WORKSPACE`, ask the user once:
-"Keep handoffs local-only (not committed)?" (recommended: yes). Then run
-`CTX handoff setup --local-only y|n`.
+`CTX handoff check-setup`. If it prints `FIRST_HANDOFF_IN_WORKSPACE`, ask the user once (one
+AskUserQuestion call, two questions): "Keep handoffs local-only (not committed)?" (recommended: yes) and
+"Keep a history of handoffs (nested git, auto-committed each turn)?" (recommended: yes). Then run
+`CTX handoff setup --local-only y|n --history y|n`.
 
 ## 3. Recover what may have been lost to compaction (cost-aware)
 `CTX handoff mine --session ${CLAUDE_SESSION_ID}`.

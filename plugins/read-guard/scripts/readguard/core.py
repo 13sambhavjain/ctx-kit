@@ -37,6 +37,15 @@ READLIKE = re.compile(r"^\s*(?:cd\s+[^;&]+(?:&&|;)\s*)*(cat|head|tail|sed\s+-n|n
 
 def data_dir():
     d = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if not d:
+        # commands Claude runs via Bash don't get CLAUDE_PLUGIN_DATA: find the installed plugin's folder
+        base = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude"),
+                            "plugins", "data")
+        try:
+            cands = [os.path.join(base, n) for n in os.listdir(base) if n.startswith("read-guard")]
+        except OSError:
+            cands = []
+        d = max(cands, key=os.path.getmtime) if cands else None
     return os.path.join(d, "read-guard") if d else os.path.join(os.path.expanduser("~"), ".read-guard")
 
 

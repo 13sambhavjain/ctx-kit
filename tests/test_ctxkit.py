@@ -177,7 +177,7 @@ class TestInitAndTree(Base):
         if not self.git:
             self.skipTest("git not installed")
         rc, out = self.init(nested_git="y")
-        self.assertIn("commit: done", out)
+        self.assertIn("commit: ctx", out)
         self.assertTrue(os.path.isdir(os.path.join(self.tmp, ".claude", "ctx", ".git")))
 
     def test_dotctx_and_home(self):
@@ -318,7 +318,7 @@ class TestFeedback(Base):
         self.init()
         rc, out = run_cli("--root", self.tmp, "feedback", "--note", "secret path %s here" % self.tmp)
         self.assertNotIn(self.tmp, out)
-        self.assertIn("<workspace>", out)
+        self.assertIn("<path>", out)
 
 
 if __name__ == "__main__":
