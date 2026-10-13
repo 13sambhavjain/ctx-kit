@@ -346,3 +346,37 @@ class TestImportAndData(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUpgradeNotes(Base):
+    def test_fresh_init_has_no_notice_but_old_setup_does(self):
+        from ctxkit import upgrade, __version__
+        self.assertFalse(upgrade.needs_notice(self.ws))  # init recorded the current version
+        # simulate a v0.2-era project: no version, no history, legacy current node, old snippet
+        cfg = dict(self.ws.local)
+        cfg.pop("plugin_version_seen", None)
+        cfg["nested_git"] = False
+        with open(self.ws.config_path, "w") as fh:
+            json.dump(cfg, fh)
+        writer.run(self.ws.ctx_root, "write", ["old.md"], "---\nsummary: o\nstatus: current\n---\n\n# Old\n")
+        snip = os.path.join(self.tmp, "CLAUDE.local.md")
+        with open(snip, encoding="utf-8") as fh:
+            t = fh.read()
+        with open(snip, "w", encoding="utf-8") as fh:
+            fh.write(t.replace("/ctx search", "ctx-search-old"))
+        ws = config.Workspace(self.tmp)
+        ids = [h[0] for h in upgrade.hints(ws)]
+        for i in ("history", "legacy", "snippet", "tags"):
+            self.assertIn(i, ids)
+        self.assertTrue(upgrade.needs_notice(ws))
+        out = self.hook("session-start", {"session_id": "u1", "cwd": self.tmp, "source": "startup"})
+        self.assertIn("/ctx-kit:ctx upgrade", out["systemMessage"])
+        out2 = self.hook("session-start", {"session_id": "u2", "cwd": self.tmp, "source": "startup"})
+        self.assertNotIn("upgrade", out2.get("systemMessage", ""))  # once per version
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli.main(["--root", self.tmp, "status", "--brief"])
+        self.assertIn("UPGRADE NOTES", buf.getvalue())
+        with redirect_stdout(io.StringIO()):
+            cli.main(["--root", self.tmp, "upgrade", "--done"])
+        self.assertFalse(upgrade.needs_notice(config.Workspace(self.tmp)))

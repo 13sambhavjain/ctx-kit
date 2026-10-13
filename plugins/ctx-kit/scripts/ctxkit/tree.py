@@ -251,8 +251,11 @@ def top_level_code_dirs(root, limit=12):
 def init(ws, storage, local_only, nested_git, write_mode, review, rules=True, overview=None):
     """Create config + skeleton. Idempotent: never overwrites existing nodes."""
     report = []
+    from . import __version__
     ws.save({"storage": storage, "local_only": bool(local_only), "nested_git": bool(nested_git),
              "write_mode": write_mode, "review": review, "rules": bool(rules)})
+    if not (ws.local or {}).get("plugin_version_seen"):
+        ws.save({"plugin_version_seen": __version__})
     report.append("config: %s" % util.rel(ws.config_path, ws.root))
     root = ws.ctx_root
     os.makedirs(root, exist_ok=True)

@@ -1,4 +1,4 @@
-# ctx-kit test checklist (v0.3)
+# ctx-kit test checklist (v0.3.1)
 
 Write down **observations only**: what you did, what you saw, any error text. Don't copy
 code or project names. Easiest: type `ctx-note: <what happened>` in the chat at any time. It's saved
@@ -15,7 +15,7 @@ on the laptop and costs no tokens. At the end, type `ctx-notes` and photograph t
 - [ ] Restart or start a new session in a test project. Did you see the one-time note "ctx-kit: no context tree here yet…"?
 
 ## 2. Init (use a small, non-sensitive project first)
-- [ ] `/ctx init`. Did it ask 4 questions in one go? Pick **workspace**, **local-only yes**, **history no**, **script** mode.
+- [ ] `/ctx init`. Did it ask 4 questions in one go? Pick **workspace**, **local-only yes**, **history yes**, **script** mode.
 - [ ] When asked to approve the `sh ".../run.sh" …` command, choose **"Yes, and don't ask again"**. Note the exact wording of the prompt.
 - [ ] Check the files: `.claude/ctx/INDEX.md`, `.claude/ctx/modules/*.md`, `CLAUDE.local.md`, `.claude/rules/ctx-*.md`, and the end of `.git/info/exclude`.
 - [ ] `git status`: the ctx files should **not** show up.
@@ -56,18 +56,19 @@ on the laptop and costs no tokens. At the end, type `ctx-notes` and photograph t
 - [ ] After a normal day of coding: `/read-guard stats`. Copy the numbers into feedback; they decide whether Bash de-dup is worth building.
 
 ## 9. v0.3 additions
+- [ ] **Update first:** `/plugin marketplace update sambhav-plugins`, then update ctx-kit (and read-guard) in the `/plugin` panel or with `claude plugin update ctx-kit@sambhav-plugins`. New session.
+- [ ] In your existing office project: did one line say "ctx-kit updated to 0.3.1 … run /ctx-kit:ctx upgrade"? Run `/ctx upgrade`. Did it list sensible changes and ask before applying any?
 - [ ] Type `ctx-note: test`. Did you get "note #1 saved" **without** Claude replying? Then `ctx-notes`: is the screen readable in a photo?
 - [ ] In a project that already has a CLAUDE.md or docs folder: `/ctx import`. Did it list files and sections with token estimates, ask before touching CLAUDE.md, and create **draft** nodes?
 - [ ] With history on: after a turn that changed a node, run `git -C .claude/ctx log -3 --stat`. Are there auto-commits with useful messages?
 - [ ] `/ctx check --diff`. Do drift lines name the commits, and show the code change?
 - [ ] Set `protected_tags`, then ask Claude to delete a tagged line. Was it refused, or flagged and held back from the commit?
-
-- [ ] Existing office tree: run `ctx mark-legacy-draft` (through `/ctx`) and `ctx handoff setup --local-only y --history y`. Note what changed.
+- [ ] (`/ctx upgrade` covers marking legacy nodes as draft and turning on tree/handoff history.)
 - [ ] Remove a tagged line in a node by hand. Was there **one** warning (not every turn), with the fix in it?
 
 ## 10. Feedback loop
 - [ ] `ctx-notes`, then photograph the screen. It must contain **no paths, code or project names**.
 
-## Known gaps in v0.1
+## Known gaps
 - Hooks run through `sh`. On Windows without Git Bash they won't run (write down what happens).
 - If your Claude Code session compacts, check `.claude/handoffs/.checkpoints/` for a digest. Note whether `/handoff` afterwards said `CHUNKS` (mining ran).

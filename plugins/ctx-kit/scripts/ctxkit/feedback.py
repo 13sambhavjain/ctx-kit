@@ -1,7 +1,6 @@
-"""/ctx-feedback: build a redacted, diagnostics-only GitHub issue draft.
+"""Feedback: local notes + a photo-friendly report (default), or an optional GitHub issue draft.
 
-Never includes code, file contents, project names or paths. The user reviews the
-draft and opens the prefilled link themselves; nothing is submitted from here.
+Diagnostics only: never code, file contents, project names or paths. Nothing is sent anywhere.
 """
 import json
 import os
@@ -84,7 +83,6 @@ def build(ws, data_dir, note, kind="observation"):
 
 
 # ------------------------------------------------------------------ local notes (no network, no tokens)
-
 
 
 def _notes_path(data_dir):

@@ -14,6 +14,7 @@ Commands
   feedback [--note TEXT] [--kind observation|bug|idea]   (saves locally + prints a photo-friendly report)
   notes [show | add TEXT | clear]       local feedback notes (also: type `ctx-note: ...` / `ctx-notes` in chat)
   import-scan [docs paths ...]          inventory existing CLAUDE.md / rules / docs for /ctx import
+  upgrade [--done]                      what an existing setup should change after a plugin update
   mark-legacy-draft                     nodes marked current but never stamped by v0.3 -> draft (to re-audit)
   check [--fix] [--diff] [--docs] [--json] [node ...]
   handoff check-setup | setup --local-only y|n | readiness --session ID | mine --session ID [--all]
@@ -27,7 +28,7 @@ import json
 import os
 import sys
 
-from . import advisor, check, config, feedback, handoff, hooks, importer, tree, util, writer
+from . import advisor, check, config, feedback, handoff, hooks, importer, tree, upgrade, util, writer
 
 
 def yn(v):
@@ -47,6 +48,19 @@ def cmd_status(ws, a):
     if not a.brief:
         lines, counts = check.run_check(ws)
         print("  check     : %s" % (", ".join("%s=%d" % kv for kv in sorted(counts.items())) or "clean"))
+    if upgrade.needs_notice(ws):
+        notes = upgrade.render(ws)
+        if notes:
+            print(notes)
+    return 0
+
+
+def cmd_upgrade(ws, a):
+    if a.done:
+        upgrade.mark_done(ws)
+        print("ctx-kit: upgrade notes dismissed for this project (version recorded).")
+        return 0
+    print(upgrade.render(ws) or "ctx-kit: nothing to change for this project.")
     return 0
 
 
@@ -320,6 +334,7 @@ def build_parser():
     s = sub.add_parser("commit"); s.add_argument("-m", "--message"); s.add_argument("--allow-protected", action="store_true")
     s = sub.add_parser("import-scan"); s.add_argument("paths", nargs="*")
     sub.add_parser("mark-legacy-draft")
+    s = sub.add_parser("upgrade"); s.add_argument("--done", action="store_true")
     s = sub.add_parser("notes"); s.add_argument("action", nargs="?", default="show", choices=["show", "add", "clear"]); s.add_argument("text", nargs="*"); s.add_argument("--kind", default="note")
     s = sub.add_parser("config"); s.add_argument("action", nargs="?", choices=["get", "set"]); s.add_argument("key", nargs="?"); s.add_argument("value", nargs="?")
     s = sub.add_parser("feedback"); s.add_argument("--note"); s.add_argument("--kind", default="observation", choices=["observation", "bug", "idea"])
@@ -345,7 +360,8 @@ def build_parser():
 CMDS = {"status": cmd_status, "init": cmd_init, "w": cmd_w, "index": cmd_index, "check": cmd_check,
         "stamp": cmd_stamp, "search": cmd_search, "touched": cmd_touched, "commit": cmd_commit,
         "config": cmd_config, "feedback": cmd_feedback, "handoff": cmd_handoff, "advisor": cmd_advisor,
-        "import-scan": cmd_import_scan, "notes": cmd_notes, "mark-legacy-draft": cmd_mark_legacy_draft}
+        "import-scan": cmd_import_scan, "notes": cmd_notes, "mark-legacy-draft": cmd_mark_legacy_draft,
+        "upgrade": cmd_upgrade}
 
 
 def main(argv=None):
@@ -373,7 +389,7 @@ def main(argv=None):
         return 0
     ws = config.Workspace(a.root)
     if not ws.initialized and a.cmd not in ("status", "init", "config", "feedback", "handoff", "advisor", "w",
-                                             "notes", "import-scan"):
+                                             "notes", "import-scan", "upgrade"):
         print("ctx-kit: not initialized in %s; run `/ctx-kit:ctx init` first." % ws.root, file=sys.stderr)
         return 2
     try:

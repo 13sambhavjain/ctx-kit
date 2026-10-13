@@ -10,7 +10,7 @@ A Claude Code plugin that keeps your project's context in a **tree of small mark
 files that Claude loads only when it needs them**. Lower token cost per session, and a
 readable, versionable record of how the project works and why decisions were made.
 
-> Status: **v0.3**: context tree (with auto-history, import, precise checks), handoff, session-size advisor,
+> Status: **v0.3.1**: context tree (with auto-history, import, precise checks), handoff, session-size advisor,
 > and feedback notes that never leave your machine. Each part works on its own.
 
 ## What you get
@@ -109,6 +109,7 @@ Local development: `claude --plugin-dir ./plugins/ctx-kit`.
 | `/pickup [id[:N]]` | Continues from a handoff |
 | `/ctx-clean [slug]` | Handoff, then clear, then automatic reload |
 | `/ctx-advisor on\|off\|status\|threshold` | Controls the session-size advisor |
+| `/ctx upgrade` | After a plugin update: lists what this project should change, applies what you approve |
 | `/ctx import [docs…]` | Adopts an existing CLAUDE.md, rules or docs into draft nodes |
 | `ctx-note: <text>` / `ctx-notes` (typed in chat) | Saves or shows feedback notes **without using any tokens** (a hook intercepts them) |
 | `/ctx-feedback [note]` | Same, with Claude adding plugin-behaviour context; prints a photo-friendly report |
@@ -142,7 +143,23 @@ workspace storage each worktree would get its own tree. If you use worktrees, ch
 **"Yes, and don't ask again"**. After that, tree writes don't prompt. In `tool` mode you
 approve "allow .claude edits for this session" once per session instead.
 
-## Upgrading an existing setup to v0.3
+## Updating the plugin
+
+Third-party marketplaces don't auto-update by default. In Claude Code:
+
+```
+/plugin marketplace update sambhav-plugins
+```
+
+Then update the plugin from the `/plugin` panel (Installed tab), or in a terminal run
+`claude plugin update ctx-kit@sambhav-plugins` (and `read-guard@sambhav-plugins`). Start a new session
+or run `/reload-plugins`.
+
+**You don't need to read the changelog.** On the first session after an update, ctx-kit shows one line
+if this project has recommended changes, and `/ctx upgrade` lists them, computed from your project,
+for you to approve one by one. The same notes appear in `/ctx`'s status, so the agent sees them too.
+
+## Upgrading an existing setup to v0.3 (what `/ctx upgrade` will suggest)
 
 - **Tree history:** if `init` ran with history off, enable it with
   `ctx config set nested_git true` and run `/ctx init` again (idempotent: existing nodes are kept).

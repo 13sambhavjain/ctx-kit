@@ -1,7 +1,7 @@
 {
   "name": "ctx-kit",
   "displayName": "ctx-kit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Context tree for Claude Code: a small INDEX plus topic nodes loaded on demand, decisions as ADRs, zero-token drift and rename checks. Plus lossless handoffs (/handoff, /pickup, /ctx-clean) and a session-size advisor.",
   "author": { "name": "13sambhavjain" },
   "repository": "https://github.com/13sambhavjain/ctx-kit",

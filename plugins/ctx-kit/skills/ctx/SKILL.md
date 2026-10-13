@@ -1,7 +1,7 @@
 ---
 name: ctx
 description: Project context tree (ctx-kit). Use to set up a tree (init), adopt an existing CLAUDE.md or docs folder (import), record durable learnings - facts, flows, interfaces, decisions and their reasons - so future sessions don't re-research (update), check or fix drift between nodes and code (check, audit), or find a node (search).
-argument-hint: init | import [docs-path ...] | update ["fact" @file ...] | check [--diff] | audit | search <words> | stamp <node...> | status
+argument-hint: init | upgrade | import [docs-path ...] | update ["fact" @file ...] | check [--diff] | audit | search <words> | stamp <node...> | status
 allowed-tools: Read Grep Glob Bash(sh "${CLAUDE_PLUGIN_ROOT}/scripts/run.sh" *)
 ---
 
@@ -32,6 +32,15 @@ local-only tree is invisible to a repo-wide Grep; if you must Grep, pass the tre
 5. If `CTX import-scan` shows an existing CLAUDE.md, rules or docs with real content, offer `/ctx import`.
 6. Tell the user: nodes start as stubs and fill in as you work (`/ctx update`). Do NOT fill every node now.
    Optional: protect the user's own lines with a tag, e.g. `CTX config set protected_tags '["[SJ]"]'`.
+
+## upgrade
+Use when the state above shows UPGRADE NOTES, or when asked. The notes are computed from this project,
+so they're correct whatever version it was set up with.
+1. `CTX upgrade`. Show the user the numbered notes in plain words, and ask which to apply (one
+   AskUserQuestion call, multi-select). Never apply them silently: they change config, node status or files.
+2. Run the chosen commands with the CTX prefix (e.g. `CTX mark-legacy-draft`). For "history", run
+   `CTX config set nested_git true`, then `CTX init` with the project's existing settings (see `CTX config get`).
+3. `CTX upgrade --done` records the version so the notes stop appearing, even if some were declined.
 
 ## import [docs-path ...]
 Adopt existing context without losing or silently "verifying" it.

@@ -10,7 +10,7 @@ import re
 import sys
 import time
 
-from . import advisor, autocommit, check, config, feedback, handoff, tree, util
+from . import advisor, autocommit, check, config, feedback, handoff, tree, upgrade, util
 
 
 def _out(obj):
@@ -85,6 +85,16 @@ def session_start(inp, data):
                 msgs.append("ctx-kit: no context tree here yet. Run /ctx-kit:ctx init to set one up "
                             "(this note is shown once per workspace).")
         else:
+            if upgrade.needs_notice(ws) and upgrade.hints(ws):
+                from . import __version__
+                key = os.path.normcase(ws.root) + "@" + __version__
+                seen_path = os.path.join(data, "upgrade-noticed.json")
+                seen = util.load_json(seen_path, {}) or {}
+                if key not in seen:
+                    seen[key] = util.today()
+                    util.save_json(seen_path, seen)
+                    msgs.append("ctx-kit updated to %s: this project has %d recommended change(s). "
+                                "Run /ctx-kit:ctx upgrade to review them." % (__version__, len(upgrade.hints(ws))))
             opens = handoff.list_handoffs(ws, only_open=True)
             if opens:
                 ids = ", ".join(h["id"] for h in opens[:3])
